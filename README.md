@@ -32,6 +32,7 @@ flowchart LR
   IDX --> LLM[Configurable embedding and chat model]
   GH --> IDX
 ```
+<img width="1901" height="962" alt="image" src="https://github.com/user-attachments/assets/f58345a9-597c-4759-9104-47754e6cff6b" />
 
 See [architecture](docs/ARCHITECTURE.md), [database](docs/DATABASE.md), [API](docs/API.md), [project specification](docs/PROJECT_SPEC.md), and [interview notes](docs/INTERVIEW_NOTES.md).
 
