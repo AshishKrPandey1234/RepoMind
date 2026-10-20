@@ -47,7 +47,7 @@ See [architecture](docs/ARCHITECTURE.md), [database](docs/DATABASE.md), [API](do
 
 ```mermaid
 sequenceDiagram
-  actor User
+  participant User
   participant API as Spring API
   participant GitHub
   participant Filter as Filter / Chunker
