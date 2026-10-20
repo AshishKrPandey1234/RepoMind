@@ -1,6 +1,6 @@
 # RepoMind Project Specification
 
-**Status:** Design baseline; no application functionality is implemented.
+**Status:** Milestone 1 foundation is implemented: React/Vite dashboard shell, Spring Boot API skeleton, and a health endpoint. Product features such as GitHub authentication, repository access, indexing, and AI are not implemented.
 
 ## 1. Problem statement
 
@@ -147,8 +147,8 @@ The API first authorizes the user against the requested local repository and con
 
 ## 11. Delivery plan
 
-1. Documentation and architecture review (current milestone).
-2. Backend skeleton, configuration, health endpoint, migration setup, and focused tests.
+1. Documentation and architecture review (complete).
+2. Local project foundation, environment-based database configuration, health endpoint, and starter verification (current milestone).
 3. GitHub OAuth/session and authenticated identity tests.
 4. Repository/branch catalog and ownership checks.
 5. Index job model and secure source retrieval/filtering/chunk metadata.

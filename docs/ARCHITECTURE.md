@@ -1,6 +1,8 @@
 # Architecture
 
-**Status:** Proposed design; implementation details and versions remain to be validated.
+**Status:** Architecture baseline; later integrations and production details remain to be validated.
+
+The Milestone 1 implementation is a responsive React/Vite client and a Spring Boot API skeleton with environment-based MySQL settings and `GET /api/health`. GitHub access, Spring Security configuration, indexing, vector storage, and model integration remain unimplemented.
 
 ## System shape
 

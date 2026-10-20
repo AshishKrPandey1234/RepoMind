@@ -1,6 +1,6 @@
 # Interview Notes
 
-**Status:** Design notes for explaining the intended implementation. These are not claims that the system is already built.
+**Status:** Design notes. Milestone 1 currently contains a React/Vite dashboard shell and a Spring Boot health endpoint; the product workflows described here are still planned and must not be presented as implemented.
 
 ## 30-second project explanation
 

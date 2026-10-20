@@ -1,0 +1,17 @@
+# Local client configuration
+.env
+.env.*
+!.env.example
+
+# Dependencies and build artifacts
+node_modules/
+dist/
+coverage/
+
+# Tool output and local files
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+.vite/
+.DS_Store
+Thumbs.db

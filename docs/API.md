@@ -1,6 +1,12 @@
 # API Contract (Planned)
 
-**Status:** Proposed HTTP contract. Endpoints are not implemented. JSON examples are illustrative. All `/api` routes use HTTPS in deployed environments. Authentication is a backend-managed session cookie; the client does not submit a user ID or GitHub token.
+**Status:** Proposed HTTP contract. Except for the foundation health endpoint below, routes are not implemented. JSON examples are illustrative. All `/api` routes use HTTPS in deployed environments. Authentication is planned to use a backend-managed session cookie; the client does not submit a user ID or GitHub token.
+
+The foundation milestone implements only `GET /api/health`. The other routes below remain planned.
+
+| Method | Path | Purpose | Expected response |
+|---|---|---|---|
+| GET | `/api/health` | Confirm the API process is responding; does not verify database connectivity | `200` with `{"status":"ok","service":"repomind-api"}` |
 
 ## Conventions
 

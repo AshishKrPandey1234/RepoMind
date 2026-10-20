@@ -2,7 +2,7 @@
 
 RepoMind is a planned AI-powered GitHub repository assistant for exploring a codebase through grounded questions, summaries, and project-specific interview practice. The initial implementation target is a modular monolith: a React and Vite client and a Java 21/Spring Boot API backed by MySQL and a vector store.
 
-> **Project status:** Documentation and design stage. Application behavior described below is planned and has not been implemented or tested yet.
+> **Project status:** Milestone 1 foundation. The responsive dashboard shell and API health endpoint are implemented. GitHub sign-in, repository data, indexing, chat, summaries, and interview generation remain planned and are not functional yet.
 
 ## Problem statement
 
@@ -89,7 +89,79 @@ The planned login uses GitHub's server-side OAuth authorization-code flow. The b
 
 ## Local setup and configuration
 
-There is no runnable application yet. Before implementation, configure GitHub OAuth callback URLs, database credentials, model provider credentials, and vector-store connectivity through environment variables or a secret manager. Keep `.env` files and all credentials out of Git. A future `.env.example` may contain names and safe placeholders only.
+## Local development on Windows
+
+### Prerequisites
+
+- Java 21 (the backend uses Spring Boot 3.5.16, which supports Java 21).
+- Node.js 20.19.x or 22.12 and newer, plus npm (Vite 8 supports these Node.js lines).
+- MySQL Server 8.x, running locally on port 3306.
+- Internet access on the first build so npm and Maven can download project dependencies. The Maven Wrapper in `backend/` downloads the configured Maven distribution if it is not cached.
+
+Milestone 1 environment check: Java 21, Node.js 24, npm 11, and MySQL Server 8.0 were found; the `MySQL80` Windows service was running and port 3306 was reachable. A `mvn` command was not on `PATH`; use the included wrapper (`mvnw.cmd`). The existence of the `repomind` database or local app user has not been checked.
+
+### Prepare MySQL once
+
+Connect to your local MySQL administrator account using your own approved method. Check whether the database and application user already exist before running the additive statements below. Do not paste a real password into this repository or commit it.
+
+```sql
+CREATE DATABASE IF NOT EXISTS repomind
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_0900_ai_ci;
+
+CREATE USER IF NOT EXISTS 'repomind_app'@'localhost'
+  IDENTIFIED BY 'replace-with-a-unique-local-password';
+
+GRANT ALL PRIVILEGES ON repomind.* TO 'repomind_app'@'localhost';
+```
+
+If the user already exists, verify its password and permissions rather than replacing it blindly. These statements are documentation only; RepoMind has not run them. JPA schema generation is disabled (`ddl-auto: none`), so the app will not create or alter tables in this milestone.
+
+### Set database variables in PowerShell
+
+Copy `.env.example` as a reference if useful, but Spring Boot does not automatically load `.env` files. For a development session, set the variables in the same PowerShell window that will run the backend:
+
+```powershell
+$env:DB_URL = 'jdbc:mysql://localhost:3306/repomind?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC'
+$env:DB_USERNAME = 'repomind_app'
+$securePassword = Read-Host 'Enter the local repomind_app password' -AsSecureString
+$env:DB_PASSWORD = [System.Net.NetworkCredential]::new('', $securePassword).Password
+```
+
+For persistence across sessions, use **Edit environment variables for your account** in Windows, add `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD`, then open a new terminal. Keep real credentials in your local environment only; `.env` files are ignored by Git.
+
+### Run the backend
+
+From `backend/`, after the database and environment variables are configured:
+
+```powershell
+.\mvnw.cmd spring-boot:run
+```
+
+The API listens at `http://localhost:8080`. Check `http://localhost:8080/api/health` for `{"status":"ok","service":"repomind-api"}`. This endpoint confirms the API process is responding; it does not prove MySQL connectivity. Actuator health is available at `http://localhost:8080/actuator/health`.
+
+### Run the frontend
+
+From `client/` in another PowerShell window:
+
+```powershell
+npm ci
+npm run dev
+```
+
+Vite prints the local URL, normally `http://localhost:5173`. Requests beginning with `/api` are proxied to the Spring Boot server at port 8080. The GitHub sign-in button is intentionally a preview and reports that authentication is not connected.
+
+### Build checks
+
+```powershell
+# In client/
+npm run build
+
+# In backend/
+.\mvnw.cmd test
+```
+
+These commands verify the frontend bundle and backend tests. They do not verify a database connection unless the local database, schema, account, and environment variables have been configured.
 
 ## Documentation and milestones
 
