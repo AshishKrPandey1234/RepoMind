@@ -45,7 +45,7 @@ See [architecture](docs/ARCHITECTURE.md), [database](docs/DATABASE.md), [API](do
 5. For a question, the API checks conversation/repository authorization, embeds the query, retrieves relevant chunks within that repository/branch scope, and builds a bounded prompt.
 6. The model returns a response with citations. The API validates citation identifiers against retrieved chunks and returns source paths and line ranges. If evidence is insufficient, the response should say so.
 
-```mermaid
+
 sequenceDiagram
   participant User
   participant API as Spring API
