@@ -34,6 +34,10 @@ flowchart LR
 ```
 <img width="1901" height="962" alt="image" src="https://github.com/user-attachments/assets/f58345a9-597c-4759-9104-47754e6cff6b" />
 <img width="1917" height="912" alt="image" src="https://github.com/user-attachments/assets/3cae8f6c-352a-44c4-9853-829aac1a2664" />
+<img width="1897" height="981" alt="image" src="https://github.com/user-attachments/assets/03db57ea-0d27-4e1b-8605-462a3849dbed" />
+<img width="1906" height="968" alt="image" src="https://github.com/user-attachments/assets/b2dcb180-b697-4e21-b766-043333efa5cd" />
+
+
 
 
 See [architecture](docs/ARCHITECTURE.md), [database](docs/DATABASE.md), [API](docs/API.md), [project specification](docs/PROJECT_SPEC.md), and [interview notes](docs/INTERVIEW_NOTES.md).
