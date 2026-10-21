@@ -75,7 +75,7 @@ The repository catalog is sourced from the authenticated GitHub API rather than 
 
 ## Indexing pipeline
 
-```mermaid
+
 sequenceDiagram
   participant C as Controller
   participant S as Index service
