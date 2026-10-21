@@ -1,14 +1,14 @@
 # Architecture
 
-**Status:** Milestone 2 implements GitHub OAuth login, a server-side session, current-user status, and public repository listing. Indexing, vector storage, and model integration remain planned.
+**Status:** Repository Q&A now implements grounded answer generation on top of GitHub OAuth, public repository and branch browsing, asynchronous indexing, MySQL chunks, Spring AI Ollama embeddings, and Chroma semantic retrieval. Summaries and interview generation remain planned. Q&A requires an explicitly configured local Ollama chat model.
 
-The implementation is a responsive React/Vite client and a Spring Boot modular monolith. The browser uses Vite's same-origin development proxy for API and OAuth routes. Spring Security keeps the GitHub authorized client in the server's HTTP session, identified by an opaque HttpOnly cookie. The API retrieves public repository metadata from GitHub using the session-held token. MySQL is configured, but user profiles and repository results are not persisted in this milestone. Indexing, vector storage, and model integration remain unimplemented.
+The implementation is a responsive React/Vite client and a Spring Boot modular monolith. The browser uses Vite's same-origin development proxy for API and OAuth routes. Spring Security keeps the GitHub authorized client in the server's HTTP session, identified by an opaque HttpOnly cookie. Public repository metadata remains remote; MySQL persists indexing jobs, eligible source chunks, and each chunk's embedding progress through Flyway migrations. Chroma stores vectors and searchable provenance metadata. User profiles and GitHub tokens are not persisted in MySQL.
 
 ## System shape
 
-RepoMind uses one deployable Spring Boot modular monolith with internal feature modules. The React/Vite application is a separate frontend build served behind the same public origin. In local development, Vite proxies `/api`, `/oauth2`, and `/login/oauth2` to the API so OAuth redirects and session cookies remain on `localhost:5173` in the browser. The implemented API coordinates GitHub OAuth and public repository listing. MySQL, indexing, vector storage, and Spring AI are future integrations; MySQL will own planned durable application state and the vector store will hold derived data.
+RepoMind uses one deployable Spring Boot modular monolith with internal feature modules. The React/Vite application is a separate frontend build served behind the same public origin. In local development, Vite proxies `/api`, `/oauth2`, and `/login/oauth2` to the API so OAuth redirects and session cookies remain on `localhost:5173` in the browser. The implemented API coordinates GitHub OAuth, public repository/branch browsing, bounded indexing, embedding, and semantic retrieval. MySQL stores job, chunk, and embedding-state data; Chroma stores vector documents. Local semantic search requires Ollama and Chroma to be running.
 
-The diagram shows the target monolith shape; only the authentication and repository catalog paths are implemented so far.
+The diagram shows implemented indexing, retrieval, and local-model Q&A.
 
 ```mermaid
 flowchart LR
@@ -18,13 +18,12 @@ flowchart LR
     Web[Spring Boot API entry]
     Auth[Spring Security OAuth/session]
     Catalog[GitHub repository catalog]
-    Jobs[Indexing jobs]
-    RAG[Chat/RAG]
-    Summary[Summary/interview]
+    Jobs[Implemented indexing jobs]
+    RAG[Semantic retrieval]
+    Summary[Planned summary/interview]
     Store[Persistence adapters]
     Auth --> Catalog
-  Catalog --> Jobs
-    Jobs --> RAG
+    Catalog --> Jobs
     RAG --> Summary
     Catalog --> Store
     Jobs --> Store
@@ -33,11 +32,9 @@ flowchart LR
   Auth --> GHLogin[GitHub OAuth endpoints]
   Catalog --> GH[GitHub REST API]
   Jobs --> GH
-  Jobs --> Embed[Embedding model]
-  RAG --> Embed
-  RAG --> ChatModel[Chat model]
-  Jobs --> Vector[(Vector store)]
-  RAG --> Vector
+    RAG --> Embed[Spring AI Ollama embeddings]
+    RAG --> Vector[(Chroma vector store)]
+    RAG --> ChatModel[Configured local Ollama chat model]
   Store --> SQL[(MySQL)]
 ```
 
@@ -94,11 +91,11 @@ The API session cookie is `HttpOnly` and `SameSite=Lax`. `SESSION_COOKIE_SECURE=
 
 Because sessions use cookies, unsafe methods require Spring Security CSRF protection. `GET /api/auth/csrf` supplies a token to the SPA; the page keeps it in memory and sends it in the header for `POST /api/auth/logout`. Logout invalidates the session and expires its cookie. `GET /api/auth/me` is a public session check; protected API requests such as `/api/repositories` return `401` without a session. No broad CORS configuration is used; the local frontend proxies API/auth routes and deployed operation should use a same-origin reverse proxy. Derive identity from the Spring Security principal; never accept user ownership from request data.
 
-This milestone uses a GitHub OAuth App with `read:user` and `public_repo`; repository listing filters to public visibility. GitHub's `public_repo` scope gives the OAuth token full access to public repositories, including hooks, even though RepoMind only performs reads. Private access is excluded. A GitHub App can provide read-only repository permissions and is a future option. Never place client secrets or access tokens in Vite variables, browser storage, URLs, or logs.
+This milestone uses a GitHub OAuth App with `read:user` and `public_repo`; browsing and indexing are limited to public repositories. GitHub's `public_repo` scope gives the OAuth token full access to public repositories, including hooks, while RepoMind only makes read requests for metadata and source content. Private access is excluded. A GitHub App can provide read-only repository permissions and is a future option. Never place client secrets or access tokens in Vite variables, browser storage, URLs, or logs.
 
 ## Repository authorization
 
-The current repository page is sourced from GitHub's authenticated `/user/repos` API and maps only the repository ID, full name, description, visibility, language, URL, and default branch. The API does not accept repository IDs from the browser or store repository rows yet. Future jobs, conversations, and retrieval requests must check current-user ownership and repository relationship. Repository identifiers in a vector filter are additional isolation, not a substitute for API authorization.
+Repository pages are sourced from GitHub's authenticated `/user/repos` API. Branch listing and index submission first scan that same user's public repository pages for the supplied numeric ID (bounded by configuration), then resolve repository metadata from GitHub by ID. The browser cannot supply an owner/name pair. Job reads include both job ID and authenticated GitHub user ID in the database query; a non-owner receives 404. Search selects the caller's latest completed job by repository ID and owner. Chroma searches filter by owner, repository, and commit, then the API checks those fields again; vector filters supplement, never replace, relational authorization.
 
 ## Indexing pipeline
 
@@ -108,37 +105,41 @@ sequenceDiagram
   participant S as Index service
   participant G as GitHub adapter
   participant P as File policy/chunker
-  participant E as Embedding adapter
-  participant V as Vector store
-  participant D as MySQL repositories
+  participant D as MySQL
   C->>S: requestIndex(repoId, branch)
-  S->>G: verify access + resolve branch SHA
+  S->>G: verify selected ID is visible; resolve branch SHA
   S->>D: persist QUEUED job
   S-->>C: job ID
   S->>D: transition RUNNING
   S->>G: fetch tree and eligible file contents
-  G-->>P: path, text, commit SHA
+  G-->>P: Git tree entries and blob bytes
   P->>P: reject binaries/generated/secrets; chunk with line spans
-  P->>E: chunk batch
-  E->>V: upsert vectors + provenance
-  S->>D: persist counts and terminal status
+  P->>D: atomically persist chunks and SUCCEEDED status
 ```
 
-Resolve a branch to an immutable commit SHA at job start. Keep per-file and total-repository limits, timeouts, bounded worker concurrency, cancellation, and retry rules. Store enough metadata to identify an index snapshot. Writes should be idempotent by a deterministic key such as repository + commit SHA + path + chunk ordinal/content hash. Treat a failed new index as incomplete; activate it only after all required work succeeds. Exact cleanup/atomic swap depends on vector-store capabilities and is an implementation decision.
+The API resolves the selected branch to an immutable commit SHA before storing a `QUEUED` job. The bounded worker obtains a recursive tree, rejects truncated or over-limit trees, and retrieves eligible Git blobs. The path/content policy excludes binary, symlink, submodule, generated, oversized, and likely secret-bearing files. Each text file is divided into bounded overlapping chunks with 1-based line numbers. A successful job and its chunk rows are committed together; a failed job stores a safe code and no partial chunk rows. Chunk metadata includes repository ID, authenticated GitHub user ID, branch, commit SHA, file path, blob SHA, chunk number, line span, and a content hash. Chunk text is private application data; status APIs do not return it.
+
+Workers have bounded thread and queue capacities. GitHub calls have connect/read timeouts; jobs have a processing deadline and configured tree/file/content limits. GitHub rate-limit and upstream failures map to safe job codes. An application restart marks `QUEUED`/`RUNNING` jobs `FAILED` with `SERVER_RESTARTED`; work is not resumed. Retry is a new job. The initial single-instance design uses in-process admission synchronization; it does not claim distributed scheduling or multi-instance quotas.
 
 ## File policy and provenance
 
-Use an allow-list of text-like extensions plus explicit language detection where possible. Exclude common build output, dependency/vendor, generated, cache, and binary paths; impose file-size, content-size, and total-index limits. Exclude sensitive filenames and apply a secret-pattern scanner before embedding. Never assume filtering catches every credential. Preserve stable 1-based line start/end through normalization and chunking. Each vector carries `userId`, `repositoryId`, `branch`, `commitSha`, `path`, `lineStart`, `lineEnd`, `chunkId`, `language`, and `jobId` metadata; do not put access tokens in metadata.
+The implemented filter uses known binary extensions, UTF-8/NUL checks, generated/vendor/build directory names, sensitive filename patterns, and credential/private-key patterns. It is heuristic and can miss credentials; filtered source is persisted in MySQL, so access and retention controls matter. Chunks preserve 1-based line ranges through newline normalization. The MySQL rows carry repository ID, authenticated GitHub user ID, branch, commit SHA, path, blob SHA, chunk index, line range, and content hash. No access token is persisted. Future vector records should also carry scoped snapshot metadata.
 
 ## RAG and citation integrity
 
-At question time: authorize local repository and conversation; choose the active indexed snapshot; embed the query; perform similarity search constrained by repository and snapshot; cap context; prompt with untrusted snippets as data; request citation chunk IDs; validate those IDs against retrieved results; map them to file path and line span. Persist the user and assistant messages, citations, and model/provider metadata suitable for audit without persisting secrets. If no evidence is relevant, answer with an explicit limitation. Never let the model invent a path or line number as a citation. The first version needs neither reranking nor model tool-calling.
+**Implemented retrieval:** `POST /api/repositories/{repositoryId}/search` finds the caller's latest completed index snapshot, embeds pending or outdated-format MySQL chunks in batches, and writes deterministic chunk IDs plus owner, repository, branch, commit, path, line, blob, and content-hash metadata to Chroma. Embedding text adds the file path, language, and detected Java declarations to the source chunk so file/class terminology is represented in the vector. V2 records each chunk's `PENDING`/`INDEXED` state in MySQL. A context-format marker in `embedding_model` triggers a safe re-embedding of existing chunks; stable IDs make Chroma writes idempotent. The question is embedded with the same Ollama model; vector search is filtered by owner/repository/commit and oversamples candidates. The service merges a bounded lexical query from MySQL scoped to the same job, owner, repository, and commit, then ranks candidates using vector similarity, source-term coverage, and filename/path matches. Result IDs are reloaded and verified through the owned MySQL job, and source text/path/lines come from MySQL instead of Chroma.
+
+**Implemented answer generation:** `POST /api/repositories/{repositoryId}/ask` calls the same semantic/hybrid retrieval service and uses only its owner-scoped latest-snapshot results. The question plus at most 12,000 characters of retrieved chunks are sent to a configured local Ollama chat model; no paid provider is used. Retrieved repository text is untrusted input and the system prompt explicitly tells the model not to follow instructions inside it. The model returns answer text plus application-issued source IDs. The service discards unknown IDs and fills citations from retrieved result metadata, so the model cannot supply arbitrary paths or line numbers. Empty retrieval or invalid/empty citations return an explicit insufficient-evidence response. Model output can still be wrong; citations show the evidence provided and do not guarantee correctness.
+
+`REPOMIND_CHAT_MODEL` is optional at startup and has no default to avoid silently selecting a model. Set it to a chat-capable tag installed in local Ollama. Startup requires both `OLLAMA_BASE_URL` and `CHROMA_HOST` to use loopback endpoints: Ollama receives source text for embeddings and answers, while Chroma stores source text with vectors. Remote endpoints are rejected before repository content can be sent. If configuration is missing or Ollama cannot serve the model, `/ask` returns a safe 503 (`LOCAL_CHAT_MODEL_NOT_CONFIGURED` or `LOCAL_CHAT_MODEL_UNAVAILABLE`). Model calls do not log source snippets or prompts. The initial answer endpoint is stateless and does not persist conversations.
+
+`GET /api/repositories/{repositoryId}/index-status` restores index state after a page reload. It returns the authenticated user's newest job attempt separately from their newest successful snapshot, so a failed re-index can be shown without hiding a previously usable snapshot. Repository cards are keyed by GitHub repository ID; answer and search state stay scoped to the card and are discarded when that repository leaves the rendered page.
 
 Summary and interview generation reuse the retrieval service with task-specific prompts and budgets. Output format is validated before returning. A provider abstraction/configuration should allow changing the chat and embedding provider without changing domain services; vector dimensions must match the configured embedding model and require reindexing when they change.
 
 ## Data and resilience
 
-The planned MySQL schema stores local users, linked GitHub identity/credential reference, repository metadata, index jobs, conversations, messages, and citation records (see [DATABASE.md](DATABASE.md)). This milestone only uses MySQL connectivity inherited from the foundation; it does not write these entities. Future vector records are rebuildable derived data. Use migrations, transactions for relational state transitions, timeouts and bounded retries for external calls, and a consistent error mapper. Do not hold a database transaction open during a long GitHub or model call. Use a bounded task executor initially; a message broker is not required for the first modular-monolith version.
+Flyway applies versioned MySQL migrations; Hibernate schema generation remains disabled. V1 creates `index_jobs` and `code_chunks`; V2 adds embedding status/model columns and a pending-work index. GitHub calls run outside database transactions; job state and chunks are persisted transactionally. Embeddings live in Chroma and MySQL tracks chunk processing state. User profiles/repository rows are not stored, and OAuth authorized clients remain in the server session. Use bounded embedding batches and the common safe error mapper. A message broker is not needed for this single-instance foundation.
 
 ## Deployment plan (proposed)
 
@@ -152,4 +153,4 @@ The planned MySQL schema stores local users, linked GitHub identity/credential r
 
 ## Key decisions to validate
 
-Spring AI provider and embedding dimensions, when to replace the current public-only OAuth App with a read-only GitHub App, durable/shared session storage, vector-store version and atomic replacement behavior, migrations tool, asynchronous worker limits, deployment provider, and data retention remain open.
+Pinning Ollama model and Chroma image versions beyond local defaults, replacing the current public-only OAuth App with a read-only GitHub App, durable/shared session storage, vector snapshot cleanup, deployment provider, and source-chunk retention remain open.

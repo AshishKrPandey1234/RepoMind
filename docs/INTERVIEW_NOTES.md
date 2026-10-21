@@ -1,10 +1,10 @@
 # Interview Notes
 
-**Status:** Milestone 2 implements a React/Vite dashboard, Spring Boot API foundation, GitHub OAuth session, current-user endpoint, and paginated public repository listing. Indexing and AI features remain planned; OAuth end-to-end use requires a locally registered GitHub OAuth App.
+**Status:** RepoMind implements GitHub OAuth, public repository and branch browsing, bounded asynchronous indexing, MySQL source chunks, Spring AI Ollama embeddings, Chroma semantic search, and stateless repository Q&A. Q&A additionally requires a locally installed chat-capable Ollama model configured with `REPOMIND_CHAT_MODEL`. Summaries and interview generation remain planned.
 
 ## 30-second project explanation
 
-RepoMind is a full-stack repository assistant in progress. Implemented today: a React/Vite client talks to a Java 21/Spring Boot modular monolith, users sign in through GitHub OAuth, and the server lists public repositories visible to that authorization. The GitHub authorized client stays in the backend session; the browser sees only a session cookie and a limited profile/repository DTO. Repository selection, indexing, line-aware chunking, vector retrieval, grounded answers, and MySQL workflow persistence are future work.
+RepoMind is a full-stack repository assistant in progress. The React/Vite client talks to a Java 21/Spring Boot modular monolith. Users sign in through GitHub, browse public repositories and branches, queue indexing, search a completed snapshot, and ask natural-language questions about the code. The GitHub authorized client stays in the backend session. A bounded worker filters files, pins content to a commit, creates overlapping line-aware chunks, and stores completed chunks and job metadata in MySQL. Spring AI uses local Ollama models and Chroma to retrieve relevant chunks and generate answers with server-validated file/line citations.
 
 ## Why a modular monolith?
 
@@ -22,12 +22,13 @@ MySQL is suitable for users, repository connections, job states, conversations, 
 4. The GitHub adapter retrieves the tree and eligible text files.
 5. A policy filter excludes binaries, generated/dependency output, oversized files, and likely secrets.
 6. A chunker keeps overlap and 1-based source line ranges.
-7. Configured embeddings are written with repository, branch, commit, path, line, chunk, and job metadata.
-8. The job reaches `SUCCEEDED` only when the snapshot is complete; failures keep a safe error code and do not masquerade as a complete index.
+7. Eligible chunks and the `SUCCEEDED` job transition are committed together to MySQL; failures store only a safe code and no partial chunks.
+8. After a process restart, queued/running jobs become `FAILED` with `SERVER_RESTARTED`; the user retries by creating a new job.
+9. The first semantic search lazily embeds pending chunks in bounded batches and marks completed work in MySQL; stable chunk IDs make retries idempotent.
 
 ## Explain RAG and citations
 
-The question is embedded and searched against the active repository/commit snapshot. The prompt contains a bounded set of retrieved chunks and treats repository content as untrusted data. The model is asked to return answer text plus retrieved chunk IDs. The server validates those IDs and constructs citation path/line data from stored metadata. If retrieval provides no useful evidence, the answer should say so. This makes sources inspectable, but it does not prove every generated statement is correct; users still review evidence.
+Semantic retrieval embeds the question and searches the authenticated user's latest completed repository/commit snapshot. Q&A reuses those results and sends a bounded context to the local chat model. Repository text is untrusted input. The model returns application-issued source IDs; the API maps only valid IDs back to retrieved path, line range, branch, and commit metadata. If evidence or valid citations are absent, the service abstains. This constrains fabricated citations, though model answers still need human judgment.
 
 ## Authentication and authorization
 
@@ -37,24 +38,24 @@ This milestone requests `read:user` and `public_repo`, then filters repository r
 
 ## Failure handling
 
-- GitHub failure/rate limiting: do not report a successful index; record safe job code and retry only within bounded policy.
-- AI/vector outage: return a stable dependency error or mark indexing failed; do not invent grounded output.
+- GitHub failure/rate limiting: do not report a successful index; record safe job code and retry by starting a new job.
+- Ollama/Chroma outage: return a stable dependency error; successfully embedded batches remain reusable and pending chunks are retried on a later request.
 - Invalid input: bean/request validation and stable field errors.
-- Unauthorized object ID: verify owner on each access and consider `404` to avoid revealing existence.
-- Partial indexing: distinguish incomplete job state and activate only a completed snapshot.
+- Unauthorized job ID: query by both job ID and authenticated GitHub user ID and return `404` for another user's job.
+- Partial indexing: database chunks are written only in the final success transaction; failed work is not exposed as an index.
 - Secret filtering: defense-in-depth file/path and pattern checks, size limits, redacted logs. Scanners can miss secrets, so filtering is risk reduction, not a guarantee.
 
 ## Trade-offs and open choices to be ready to discuss
 
 - OAuth App simplicity versus GitHub App fine-grained, read-only repository permissions.
 - Session cookie versus token-based browser auth; cookie avoids exposing bearer tokens but requires CSRF defenses.
-- Chroma versus another compatible vector store: decide based on Spring AI adapter support, deployment, filtering, persistence, and operational needs.
+- Chroma was selected for this milestone through Spring AI's vector-store interface; a persistent service and Ollama model must be running locally.
 - Chunk size/overlap and retrieval top-k affect context quality, latency, and model cost; tune with representative repositories and tests.
 - Snapshot isolation improves reproducibility but consumes storage; define cleanup/retention.
-- Keep model/embedding adapters configurable; changing embedding dimensions requires reindexing.
+- Keep model settings externalized. Model changes re-embed the selected snapshot from MySQL; dimension changes need a new Chroma collection before re-embedding.
 - A bounded executor keeps first deployment simple; larger workloads may justify a durable queue, with job idempotency maintained.
 - Generated answers are probabilistic; citations improve traceability but do not eliminate hallucination.
 
 ## Evidence to add during implementation
 
-For interview readiness, retain architecture decisions, migration history, test output, and a small demo repository with known Q&A answers. Explain only behavior supported by code and tests. Document provider/model versions, prompt/citation validation, file filter behavior, authorization tests, failure tests, and a deployment walkthrough as those milestones are completed.
+For interview readiness, retain architecture decisions, migration history, test output, and a small demo repository with known retrieval questions. Explain only behavior supported by code and tests. Document provider/model versions, retrieval filters, file policy, authorization tests, failure tests, and a deployment walkthrough as milestones are completed.

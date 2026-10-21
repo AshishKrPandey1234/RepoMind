@@ -52,7 +52,7 @@
 .overview-section { margin-top: 29px; }.section-heading { display: flex; align-items: end; justify-content: space-between; margin-bottom: 13px; }.section-kicker { color: #737482; font-size: 8px; letter-spacing: 1px; }.section-heading h2 { margin: 5px 0 0; color: #e8e8f0; font: 600 17px/1.35 'Manrope',sans-serif; letter-spacing: -.35px; }
 .unavailable-label { display: inline-flex; align-items: center; gap: 7px; padding-bottom: 3px; color: #858692; font-size: 9px; }.overview-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
 .overview-card { position: relative; min-height: 138px; padding: 15px 15px 14px; border: 1px solid var(--border); border-radius: 10px; background: linear-gradient(143deg,rgba(255,255,255,.035),rgba(255,255,255,.013)); }.metric-icon { display: grid; width: 29px; height: 29px; place-items: center; margin-bottom: 13px; border-radius: 8px; }.metric-icon.violet { color: #b59ef4; background: rgba(161,132,236,.11); }.metric-icon.blue { color: #87b5e6; background: rgba(104,159,212,.1); }.metric-icon.green { color: #77cda4; background: rgba(102,204,153,.09); }
-.metric-topline { position: absolute; top: 19px; right: 13px; left: 54px; display: flex; align-items: center; justify-content: space-between; gap: 5px; color: #b9b9c4; font-size: 10px; }.metric-placeholder { color: #666773; font: 7px 'DM Mono',monospace; letter-spacing: .2px; }.metric-value { color: #e3e1ea; font: 500 21px/1 'Manrope',sans-serif; }.overview-card p { max-width: 250px; margin: 6px 0 0; color: #777885; font-size: 9px; line-height: 1.5; }
+.metric-topline { position: absolute; top: 19px; right: 13px; left: 54px; display: flex; align-items: center; justify-content: space-between; gap: 5px; color: #b9b9c4; font-size: 10px; }.metric-value { color: #e3e1ea; font: 500 21px/1 'Manrope',sans-serif; }.overview-card p { max-width: 250px; margin: 6px 0 0; color: #777885; font-size: 9px; line-height: 1.5; }
 
 .repositories-section { margin-top: 31px; }.repository-heading { margin-bottom: 13px; }.button-secondary { color: #d4d2de; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.035); }.button-secondary:hover { border-color: rgba(184,161,244,.4); background: rgba(157,130,224,.08); }
 .empty-state { position: relative; display: grid; min-height: 214px; grid-template-columns: 165px 1fr; align-items: center; gap: 27px; padding: 24px 29px 46px; overflow: hidden; border: 1px dashed rgba(255,255,255,.12); border-radius: 11px; background: rgba(255,255,255,.014); }.empty-illustration { position: relative; display: grid; width: 130px; height: 120px; place-items: center; margin: 0 auto; }.empty-orbit { position: absolute; width: 107px; height: 72px; border: 1px solid rgba(175,151,240,.16); border-radius: 50%; transform: rotate(-22deg); }.empty-book { position: relative; display: grid; width: 62px; height: 62px; place-items: center; color: #b39bed; border: 1px solid rgba(179,155,237,.24); border-radius: 17px; background: linear-gradient(145deg,#262231,#1b1b24); box-shadow: 0 12px 34px rgba(0,0,0,.25); transform: rotate(-7deg); }.empty-spark { position: absolute; color: #bba8ee; }.spark-a { top: 15px; right: 22px; font-size: 14px; }.spark-b { bottom: 13px; left: 18px; color: #7c9ebc; font-size: 13px; }
@@ -75,7 +75,37 @@
 .loading-spinner { width: 15px; height: 15px; border: 2px solid rgba(185,164,242,.2); border-top-color: #b9a4f2; border-radius: 50%; animation: spin .8s linear infinite; }@keyframes spin { to { transform: rotate(360deg); } }
 .repository-error { display: flex; align-items: center; gap: 10px; padding: 13px; color: #e6b9b9; border: 1px solid rgba(210,126,126,.2); border-radius: 9px; background: rgba(185,75,75,.06); font-size: 10px; }.repository-error > span { flex: 1; }.repository-error .button { flex: 0 0 auto; }
 .repository-pagination { display: flex; align-items: center; justify-content: space-between; padding-top: 12px; color: #858692; font-size: 9px; }.repository-pagination > div { display: flex; gap: 7px; }.repository-pagination .button { min-height: 30px; font-size: 9px; }.repository-pagination .button:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+.repository-index-action { display: flex; justify-content: flex-end; padding-top: 10px; }.repository-index-action .button { min-height: 31px; font-size: 9px; }
+.indexer-panel { display: grid; gap: 7px; padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--border); }.indexer-panel label { color: #9694a1; font-size: 9px; }
+.indexer-controls { display: flex; gap: 8px; }.indexer-controls select { min-width: 0; flex: 1; padding: 0 9px; color: #d4d2de; border: 1px solid rgba(255,255,255,.12); border-radius: 7px; background: #1b1b24; font-size: 10px; }.indexer-controls option { background: #1b1b24; }.indexer-controls .button { min-height: 34px; font-size: 9px; }.indexer-help { color: #81828f; font-size: 9px; }
+.index-job-status { display: grid; gap: 7px; padding: 11px; margin-top: 12px; border: 1px solid rgba(255,255,255,.09); border-radius: 8px; background: rgba(255,255,255,.02); }.index-job-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #c9c7d2; font-size: 10px; }.index-job-heading span { color: #a49aab; font-size: 8px; }.index-job-counts { color: #858692; font-size: 9px; }.status-succeeded .index-job-heading span { color: #80cba0; }.status-failed .index-job-heading span { color: #e49a9a; }.retry-index-button { justify-self: start; min-height: 29px; margin-top: 3px; font-size: 9px; }
+.indexer-error { color: #e6b9b9; font-size: 9px; line-height: 1.5; }
 .connection-dot.online { animation: none; }
+
+.repository-search-action { display: flex; justify-content: flex-end; padding-top: 8px; }
+.repository-search-action .button { min-height: 29px; font-size: 9px; }
+.search-panel { display: grid; gap: 8px; padding-top: 12px; margin-top: 10px; border-top: 1px solid var(--border); }
+.search-panel label { color: #9694a1; font-size: 9px; }
+.search-panel textarea { width: 100%; min-height: 57px; padding: 9px 10px; resize: vertical; color: #dedce8; border: 1px solid rgba(255,255,255,.12); border-radius: 7px; background: #1b1b24; font-family: inherit; font-size: 10px; line-height: 1.5; }
+.search-panel textarea::placeholder { color: #777885; }
+.search-panel > .button { justify-self: start; min-height: 32px; font-size: 9px; }
+.search-panel .loading-spinner { width: 12px; height: 12px; }
+.search-results { display: grid; gap: 8px; margin-top: 3px; }
+.search-result { min-width: 0; padding: 9px; border: 1px solid rgba(255,255,255,.08); border-radius: 7px; background: rgba(255,255,255,.02); }
+.search-result-heading { display: flex; justify-content: space-between; gap: 8px; color: #d2c9eb; font: 9px/1.4 'DM Mono',monospace; }
+.search-result-heading strong { overflow-wrap: anywhere; font-weight: 500; }
+.search-result-heading span { flex: 0 0 auto; color: #87cba5; }
+.search-result pre { max-height: 190px; overflow: auto; padding: 8px; margin: 7px 0; color: #aaaab6; border-radius: 5px; background: rgba(0,0,0,.2); font: 9px/1.55 'DM Mono',monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.search-result small { color: #777885; font: 8px 'DM Mono',monospace; }
+.repository-search-action { gap: 7px; flex-wrap: wrap; }
+.repository-answer { display: grid; gap: 7px; padding-top: 9px; }
+.repository-answer h4,.repository-answer h5 { margin: 0; color: #cfc7e4; font-size: 10px; font-weight: 600; }
+.repository-answer h5 { margin-top: 4px; color: #9995a8; }
+.repository-answer-text,.answer-message { margin: 0; padding: 10px; color: #d0ceda; border: 1px solid rgba(161,132,236,.18); border-radius: 7px; background: rgba(161,132,236,.045); font-size: 10px; line-height: 1.65; white-space: pre-wrap; }
+.answer-snapshot { color: #8f8a9f; font: 8px/1.5 'DM Mono',monospace; overflow-wrap: anywhere; }
+.answer-message > p { margin: 0 0 7px; }
+.answer-sources { display: grid; gap: 8px; }
+.search-result-heading a { color: #d2c9eb; overflow-wrap: anywhere; }
 
 @media (min-width: 1500px) { .page-content { padding-top: 43px; }.welcome-panel { min-height: 320px; } }
 @media (max-width: 1080px) { .sidebar { width: 214px; }.main-content { margin-left: 214px; }.page-content { padding-right: 27px; padding-left: 27px; }.topbar { padding-right: 27px; padding-left: 27px; }.welcome-panel { padding-right: 25px; padding-left: 25px; }.welcome-art { transform: scale(.9); } }

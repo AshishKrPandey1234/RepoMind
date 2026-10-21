@@ -61,6 +61,20 @@ public class GitHubRepositoryService {
         }
     }
 
+    public void verifyRepositoryListedForUser(OAuth2AuthorizedClient authorizedClient, long repositoryId,
+                                               int maxPages) {
+        for (int page = 0; page < maxPages; page++) {
+            RepositoryPage repositories = listRepositories(authorizedClient, page, 100);
+            if (repositories.items().stream().anyMatch(repository -> repository.githubRepositoryId() == repositoryId)) {
+                return;
+            }
+            if (!repositories.hasNext()) {
+                throw new GitHubApiException(404, "GITHUB_RESOURCE_NOT_FOUND", null);
+            }
+        }
+        throw new GitHubApiException(422, "GITHUB_ACCESS_CHECK_LIMIT", null);
+    }
+
     private boolean hasNextPage(HttpHeaders headers) {
         String link = headers.getFirst(HttpHeaders.LINK);
         return link != null && (link.contains("rel=\"next\"") || link.contains("rel=next"));
@@ -117,11 +131,14 @@ public class GitHubRepositoryService {
             return retryAfterSeconds;
         }
 
-        static GitHubApiException from(RestClientResponseException exception) {
+        public static GitHubApiException from(RestClientResponseException exception) {
             int status = exception.getStatusCode().value();
             HttpHeaders headers = exception.getResponseHeaders();
             if (status == 401) {
                 return new GitHubApiException(401, "GITHUB_AUTHORIZATION_EXPIRED", null);
+            }
+            if (status == 404) {
+                return new GitHubApiException(404, "GITHUB_RESOURCE_NOT_FOUND", null);
             }
             if (status == 403 || status == 429) {
                 String remaining = headers == null ? null : headers.getFirst("X-RateLimit-Remaining");

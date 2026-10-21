@@ -106,6 +106,29 @@ class GitHubRepositoryServiceTest {
         throw new AssertionError("Expected GitHub permission failure to be translated");
     }
 
+    @Test
+    void validatesRepositoryAgainstTheAuthenticatedUsersPublicRepositoryList() {
+        server.expect(requestTo(org.hamcrest.Matchers.containsString("page=1")))
+                .andRespond(withSuccess("[{\"id\":42,\"full_name\":\"octocat/Hello-World\",\"visibility\":\"public\"}]",
+                        MediaType.APPLICATION_JSON));
+
+        service.verifyRepositoryListedForUser(authorizedClient(), 42, 2);
+
+        server.verify();
+    }
+
+    @Test
+    void rejectsRepositoryNotPresentInTheAuthenticatedUsersList() {
+        server.expect(requestTo(org.hamcrest.Matchers.containsString("page=1")))
+                .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                service.verifyRepositoryListedForUser(authorizedClient(), 42, 2))
+                .isInstanceOf(GitHubRepositoryService.GitHubApiException.class)
+                .hasMessage("GITHUB_RESOURCE_NOT_FOUND");
+        server.verify();
+    }
+
     private OAuth2AuthorizedClient authorizedClient() {
         ClientRegistration registration = ClientRegistration.withRegistrationId("github")
                 .clientId("test-client")

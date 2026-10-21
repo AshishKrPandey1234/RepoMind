@@ -2,7 +2,9 @@ package com.repomind.auth;
 
 import com.repomind.config.SecurityConfig;
 import com.repomind.health.HealthController;
+import com.repomind.indexing.IndexingProperties;
 import com.repomind.repository.GitHubRepositoryService;
+import com.repomind.repository.GitHubContentClient;
 import com.repomind.repository.RepositoryController;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,6 +34,12 @@ class AuthSecurityTest {
 
     @MockitoBean
     private GitHubRepositoryService repositoryService;
+
+    @MockitoBean
+    private GitHubContentClient contentClient;
+
+    @MockitoBean
+    private IndexingProperties indexingProperties;
 
     @Test
     void currentUserReturnsUnauthenticatedStateWithoutSession() throws Exception {

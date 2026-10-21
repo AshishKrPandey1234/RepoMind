@@ -5,6 +5,7 @@ import OverviewCard from './components/OverviewCard.jsx'
 import RepositoryCard from './components/RepositoryCard.jsx'
 import Sidebar from './components/Sidebar.jsx'
 import { apiRequest, getCsrfToken, getRepositories } from './services/api.js'
+import { repositoryCardKey } from './services/repositoryIdentity.js'
 import './App.css'
 
 function App() {
@@ -155,8 +156,8 @@ function App() {
             </div>
             <div className="overview-grid">
               <OverviewCard icon="repo" label="Repositories loaded" value={signedIn && !repositoryLoading ? String(pageItems.length) : '—'} description={signedIn ? 'Repositories on the current page' : 'Sign in to load your repositories'} accent="violet" />
-              <OverviewCard icon="layers" label="Indexed projects" value="—" description="Indexing is planned for a later milestone" accent="blue" />
-              <OverviewCard icon="message" label="Questions asked" value="—" description="Repository chat is planned for a later milestone" accent="green" />
+              <OverviewCard icon="layers" label="Indexing" value="Per repository" description="Choose a branch and follow file and chunk progress" accent="blue" />
+              <OverviewCard icon="message" label="Repository Q&A" value="Available" description="Ask grounded questions with file and line citations" accent="green" />
             </div>
           </section>
 
@@ -170,7 +171,7 @@ function App() {
             {!authLoading && !signedIn && !repositoryError && <EmptyState onSignIn={startSignIn} />}
             {!repositoryLoading && signedIn && !repositoryError && pageItems.length === 0 && <EmptyState authenticated />}
             {!repositoryLoading && signedIn && !repositoryError && pageItems.length > 0 && <>
-              <div className="repository-grid">{pageItems.map(repository => <RepositoryCard key={repository.githubRepositoryId} repository={repository} />)}</div>
+              <div className="repository-grid">{pageItems.map(repository => <RepositoryCard key={repositoryCardKey(repository)} repository={repository} csrf={csrf} />)}</div>
               <div className="repository-pagination">
                 <span>Page {repositories.page + 1}</span>
                 <div>

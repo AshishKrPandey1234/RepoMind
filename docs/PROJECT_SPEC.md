@@ -1,6 +1,6 @@
 # RepoMind Project Specification
 
-**Status:** Milestone 2 implements the React/Vite dashboard, Spring Boot API foundation, GitHub OAuth session, current-user endpoint, and paginated public repository listing. Local user/repository persistence, indexing, and AI are not implemented.
+**Status:** Milestone 3B implements the React/Vite dashboard, Spring Boot modular monolith, GitHub OAuth session, public repository/branch listing, asynchronous indexing, MySQL chunks, Spring AI Ollama embeddings, and Chroma semantic retrieval. Chat generation, summaries, and interview generation remain planned.
 
 ## 1. Problem statement
 
@@ -11,12 +11,12 @@ Developers joining an unfamiliar project spend time locating relevant code, trac
 ### Goals
 
 - Authenticate users through GitHub and list only repositories GitHub authorizes them to see. **Milestone 2 scope:** public repositories only.
-- Allow repository and branch selection and provide durable indexing status.
-- Fetch, filter, chunk, embed, and index source files with provenance metadata.
-- Answer questions using scoped retrieval and cite relevant file paths and line ranges.
+- Allow repository and branch selection and provide durable indexing status. **Milestone 3A:** implemented for public repositories.
+- Fetch, filter, and chunk source files with provenance metadata. **Milestone 3A:** persisted in MySQL.
+- Retrieve relevant code for natural-language questions using owner/repository/commit scoped semantic search, returning file paths, line ranges, scores, snippets, and commit SHA. **Milestone 3B:** implemented; no chat answer generation yet.
 - Generate a repository overview and project-specific interview practice.
 - Store user profiles, repository records, indexing jobs, and chat history in MySQL.
-- Handle invalid input, authorization failures, GitHub/API limits, indexing errors, and unavailable AI/vector services with useful, non-sensitive errors.
+- Handle invalid input, authorization failures, GitHub/API limits, indexing errors, and unavailable embedding/vector services with useful, non-sensitive errors.
 
 ### Non-goals for the first version
 
@@ -39,14 +39,14 @@ Developers joining an unfamiliar project spend time locating relevant code, trac
 | ID | Requirement | Acceptance intent |
 |---|---|---|
 | FR-01 | GitHub sign-in | **Implemented in Milestone 2:** Spring Security validates OAuth state, returns the GitHub profile through `/api/auth/me`, and retains the authorized client in a server-side session. Local user persistence remains planned. |
-| FR-02 | Repository listing and later branch selection | **Partially implemented in Milestone 2:** authenticated, paginated listing of public repositories. Branch selection and locally connected repository records remain planned. |
-| FR-03 | Indexing | Each job records repository, branch, resolved commit, state, timestamps, and safe failure details. |
-| FR-04 | File policy | Binary, generated, oversized, and likely secret-bearing files are excluded before embedding. |
-| FR-05 | Provenance | Each indexed chunk keeps path, line start/end, commit SHA, branch/repository scope, and stable chunk ID. |
-| FR-06 | Q&A | Retrieval is scoped to an authorized indexed repository/branch; returned citations refer to retrieved chunks. |
-| FR-07 | Summary and interview practice | These use retrieved repository evidence and return citations where appropriate. |
-| FR-08 | History | Conversations and messages are persisted and owner-checked. |
-| FR-09 | Resilience | External provider failures, rate limits, invalid input, and job failures have stable API errors and actionable job state. |
+| FR-02 | Repository listing and branch selection | **Implemented in Milestone 3A:** authenticated, paginated public repository and branch listing. Repository metadata is not stored separately. |
+| FR-03 | Indexing jobs | **Foundation implemented in Milestone 3A:** jobs pin repository, branch and commit, track status/timestamps/counts, and expose safe failure codes. |
+| FR-04 | File policy | **Implemented in Milestone 3A:** binary, symlink, submodule, generated, oversized, and heuristic likely-secret files are excluded. The scanner is not a guarantee of secret detection. |
+| FR-05 | Provenance | **Implemented in Milestone 3A:** MySQL chunks keep repository/user, branch, commit, file path, blob SHA, chunk index, content hash, and 1-based line range. |
+| FR-06 | Semantic code search | **Implemented in Milestone 3B:** retrieval is scoped to the authenticated owner's latest completed repository snapshot and returns source snippets with path, line, score, and commit metadata. Chat answer generation remains planned. |
+| FR-07 | Summary and interview practice | Planned: these use retrieved repository evidence and return citations where appropriate. |
+| FR-08 | History | Planned: conversations and messages are persisted and owner-checked. |
+| FR-09 | Resilience | Implemented for GitHub, validation, queue/limit failures, indexing status, and safe embedding/vector-service failures. |
 
 ## 5. Quality and security requirements
 
@@ -60,7 +60,7 @@ Developers joining an unfamiliar project spend time locating relevant code, trac
 - Ensure answer citations are derived from retrieval records; treat repository content as untrusted prompt input.
 - Add unit and integration tests in later implementation milestones; documentation alone does not establish these properties.
 
-Milestone 2 uses the OAuth App scopes `read:user` and `public_repo`. The latter permits full access to public repositories, including hooks, even though the current service only reads repository metadata. Private repository access is not requested. GitHub Apps provide finer-grained read-only permissions and remain a future consideration.
+The OAuth App requests `read:user` and `public_repo`. The latter permits full access to public repositories, including hooks, while RepoMind only reads repository metadata, branches, and source blobs. Private repository access is not requested. GitHub Apps provide finer-grained read-only permissions and remain a future consideration.
 
 ## 6. Planned architecture
 
@@ -110,8 +110,8 @@ flowchart TB
 4. Retrieve a bounded recursive tree or paginated content listing and fetch only supported text files. Respect GitHub rate limits and cancellation where feasible.
 5. Apply allow/deny rules: reject binary encodings, known generated/vendor/build directories, oversized files, and likely secrets (credential patterns and sensitive filenames). Rules should be configurable and reviewed; filtering reduces exposure but cannot guarantee detection.
 6. Normalize line endings without losing line mapping; split source into token/character-bounded overlapping chunks and preserve 1-based line ranges.
-7. Generate embeddings via a configured provider and write vectors with repository ID, owner ID, branch, commit SHA, path, line range, language, chunk ID, and indexing job ID.
-8. Mark the snapshot active only after successful writes. On failure, report the job failure and avoid presenting a partial snapshot as complete. An explicit retry creates a new job attempt; it does not reset the failed job. Cleanup/replacement strategy is a detailed implementation decision.
+7. **Milestone 3B:** on the first semantic-search request, embed pending chunks from the latest completed snapshot in bounded batches using Spring AI's Ollama integration and upsert Chroma documents with deterministic IDs and provenance metadata.
+8. Embed the question with the same model; search only the authenticated owner's repository and commit, verify returned metadata again, and return bounded snippets with path/line/score references. Provider failures leave completed batches reusable and remaining rows pending. Chat generation is a later milestone.
 
 ```mermaid
 stateDiagram-v2
@@ -124,9 +124,9 @@ stateDiagram-v2
   FAILED --> [*]
 ```
 
-## 8. RAG workflow
+## 8. Semantic retrieval and future RAG workflow
 
-The API first authorizes the user against the requested local repository and conversation. It embeds the question and retrieves a bounded set of matching chunks filtered by repository, branch, and active commit. The prompt instructs the model to answer only from supplied evidence, state when evidence is insufficient, and return chunk IDs as citations. The server resolves IDs to trusted metadata and emits paths and line ranges. Chat history is bounded and treated as context, not as authority. Repository text is untrusted input and must not override system instructions or trigger tools. The initial version does not require reranking or model tool-calling.
+Implemented retrieval first resolves an owned completed job in MySQL, embeds pending source chunks, and retrieves a bounded result set filtered by owner, repository, and commit. The API validates vector metadata again and returns source-derived paths, line ranges, and commit information. It does not generate a chat answer. A future prompt must answer only from supplied evidence, state when evidence is insufficient, and cite retrieved chunk IDs. Chat history should be bounded and treated as context, not as authority. Repository text is untrusted input and must not override system instructions or trigger tools. The initial chat version does not require reranking or model tool-calling.
 
 ## 9. Failure behavior
 
@@ -139,12 +139,12 @@ The API first authorizes the user against the requested local repository and con
 
 ## 10. Open decisions
 
-- Whether to migrate from the implemented OAuth App to a GitHub App for finer-grained, read-only repository permissions before adding repository content access.
+- Whether to migrate from the implemented OAuth App to a GitHub App for finer-grained, read-only repository permissions before enabling broader repository operations or private repository access.
 - Whether to retain GitHub tokens after login and how to encrypt/refresh/revoke them. Needed for private-repository indexing; do not persist plaintext.
-- Spring Boot and Spring AI compatible release versions, embedding/chat provider, model dimensions, and cost limits.
-- Vector store deployment and isolation strategy; exact Chroma/compatible adapter version.
+- Chat model/provider, embedding dimension migration strategy, and any future hosted-provider costs. Milestone 3B uses Spring AI 1.1.8, local Ollama `nomic-embed-text`, and Chroma.
+- Production vector-store deployment and isolation strategy. Local Chroma is configured for development.
 - Indexing queue/executor strategy, job concurrency, retry limits, and maximum repository/file/chunk quotas.
-- Schema migration tool, vector data retention/deletion, conversation retention, and account deletion behavior.
+- Vector data retention/deletion, conversation retention, and account deletion behavior.
 - Deployment host, TLS/reverse proxy, secrets manager, backups, monitoring, and public demo constraints.
 
 ## 11. Delivery plan
