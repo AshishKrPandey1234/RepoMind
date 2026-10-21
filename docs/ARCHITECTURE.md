@@ -99,7 +99,7 @@ Repository pages are sourced from GitHub's authenticated `/user/repos` API. Bran
 
 ## Indexing pipeline
 
-```mermaid
+
 sequenceDiagram
   participant C as Controller
   participant S as Index service
