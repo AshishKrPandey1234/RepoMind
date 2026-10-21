@@ -1,21 +1,25 @@
-# API Contract (Planned)
+# API Contract
 
-**Status:** Proposed HTTP contract. Except for the foundation health endpoint below, routes are not implemented. JSON examples are illustrative. All `/api` routes use HTTPS in deployed environments. Authentication is planned to use a backend-managed session cookie; the client does not submit a user ID or GitHub token.
+**Status:** `GET /api/health`, `GET /api/auth/me`, `GET /api/auth/csrf`, `POST /api/auth/logout`, and `GET /api/repositories` are implemented. Other routes are planned. All `/api` routes use HTTPS in deployed environments. Authentication uses a backend-managed session cookie; the client does not submit a user ID or GitHub token.
 
-The foundation milestone implements only `GET /api/health`. The other routes below remain planned.
+The repository listing is limited to public repositories in this milestone. It uses the current user's GitHub OAuth authorization and is paginated using GitHub API pages.
 
 | Method | Path | Purpose | Expected response |
 |---|---|---|---|
 | GET | `/api/health` | Confirm the API process is responding; does not verify database connectivity | `200` with `{"status":"ok","service":"repomind-api"}` |
+| GET | `/api/auth/me` | Read current GitHub profile/session state | `200` |
+| GET | `/api/auth/csrf` | Bootstrap a CSRF token for unsafe browser requests | `200` |
+| POST | `/api/auth/logout` | Invalidate the current server session | `204` |
+| GET | `/api/repositories?page=0&size=30` | List public repositories accessible to the authenticated GitHub user | `200` |
 
 ## Conventions
 
 - Base path: `/api`; JSON request and response bodies unless stated otherwise.
 - IDs are opaque strings in the public API even if stored as numeric database keys.
-- Paginate list endpoints with `page` (zero-based) and `size` (bounded, default 20); return `items`, `page`, `size`, `totalItems`, `totalPages`.
+- Paginate list endpoints with zero-based `page` and bounded `size`; future local lists default to 20. The GitHub repository endpoint defaults to 30 and returns `items`, `page`, `size`, and `hasNext` from GitHub pagination.
 - Validate request fields and enforce per-user resource ownership on every call.
 - Cookie-authenticated state-changing requests require the configured CSRF token/header.
-- Error shape:
+- Planned error envelope for future domain endpoints:
 
 ```json
 {
@@ -29,31 +33,60 @@ The foundation milestone implements only `GET /api/health`. The other routes bel
 }
 ```
 
-The response must not include stack traces, tokens, provider secrets, or inaccessible resource details.
+The current GitHub integration instead returns compact `{ "code", "message" }` JSON errors and a `Retry-After` header where available. An unauthenticated protected API request returns `401`; a failed CSRF check returns `403`. Responses do not include stack traces, tokens, provider secrets, or raw upstream bodies.
 
 ## Authentication
 
 | Method | Path | Purpose | Expected response |
 |---|---|---|---|
-| GET | `/auth/github` | Start OAuth authorization; redirects to GitHub | `302` |
-| GET | `/auth/github/callback` | Validate state, exchange code, create session | `302` to client route |
-| GET | `/auth/me` | Return current local profile and auth status | `200` |
-| POST | `/auth/logout` | Invalidate current session | `204` |
+| GET | `/oauth2/authorization/github` | Start Spring Security OAuth authorization; redirects to GitHub | `302` |
+| GET | `/login/oauth2/code/github` | Default Spring Security callback; validates state, exchanges code, creates session | `302` to the configured frontend URL |
+| GET | `/api/auth/me` | Return current GitHub profile and session status; available unauthenticated for session checks | `200` |
+| GET | `/api/auth/csrf` | Return `{ "headerName", "token" }` for the current session's CSRF protection | `200` |
+| POST | `/api/auth/logout` | Invalidate the current server session; requires the CSRF header returned above | `204` |
 
-`/auth/me` example: `{"authenticated":true,"user":{"id":"usr_...","githubLogin":"octocat","displayName":"Octocat","avatarUrl":"https://..."}}`. No access token or client secret is returned. OAuth callback errors redirect with a safe, non-sensitive error code; do not put tokens in query parameters.
+`/api/auth/me` examples:
+
+```json
+{"authenticated":false,"user":null}
+```
+
+```json
+{"authenticated":true,"user":{"id":"583231","githubLogin":"octocat","displayName":"The Octocat","avatarUrl":"https://avatars.githubusercontent.com/u/583231"}}
+```
+
+The response contains only a small profile projection. The GitHub access token remains in the server-side authorized-client session. OAuth state is managed by Spring Security. The session cookie is `HttpOnly` and `SameSite=Lax`; it is `Secure` when `SESSION_COOKIE_SECURE=true`. The frontend keeps the CSRF token in memory and sends it in the returned header for logout. OAuth callback errors redirect to the configured frontend with the fixed code `authError=oauth_failed`; provider details and tokens are not placed in the URL.
 
 ## GitHub repositories and branches
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/github/repositories?page=0&size=20` | List repositories visible to the current GitHub authorization |
-| GET | `/repositories/{repositoryId}/branches?page=0&size=50` | List branches for a repository the user can access |
-| POST | `/repositories` | Connect/store selected GitHub repository metadata |
-| GET | `/repositories` | List repositories connected by current user |
+| GET | `/api/repositories?page=0&size=30` | **Implemented.** List public repositories visible to the current GitHub authorization |
+| GET | `/api/repositories/{repositoryId}/branches?page=0&size=50` | List branches for a repository the user can access |
+| POST | `/api/repositories` | Connect/store selected GitHub repository metadata |
 
-Repository DTO: `id`, `githubRepositoryId`, `owner`, `name`, `fullName`, `defaultBranch`, `private`, `htmlUrl`. Pagination should account for GitHub API pagination/rate limits. The backend must verify the GitHub repository ID against the current user's GitHub API response before connecting/indexing it.
+Implemented repository page response:
 
-The `POST /repositories` request should contain only a `githubRepositoryId` selected from the authenticated user's GitHub repository results. The backend resolves and validates the owner/name and other metadata from GitHub; it must not trust client-submitted ownership or visibility fields.
+```json
+{
+  "items": [{
+    "githubRepositoryId": 42,
+    "fullName": "octocat/Hello-World",
+    "description": "Example project",
+    "visibility": "public",
+    "primaryLanguage": "Java",
+    "url": "https://github.com/octocat/Hello-World",
+    "defaultBranch": "main"
+  }],
+  "page": 0,
+  "size": 30,
+  "hasNext": true
+}
+```
+
+`page` is zero-based; `size` defaults to 30 and is bounded to 1–100. The service maps each page to GitHub's `/user/repos` endpoint and derives `hasNext` from the `Link` response header. The OAuth request uses `read:user` and `public_repo`, and the GitHub request filters `visibility=public`; private repositories are not returned. GitHub's `public_repo` scope gives the OAuth token full access to public repositories (including repository hooks), despite RepoMind only reading repository metadata. This is a known OAuth App permission limitation; GitHub Apps provide more granular permissions but are outside this milestone. Repository records are not persisted locally yet.
+
+The future `POST /api/repositories` request should contain only a `githubRepositoryId` selected from the authenticated user's GitHub repository results. The backend resolves and validates the owner/name and other metadata from GitHub; it must not trust client-submitted ownership or visibility fields.
 
 ## Indexing jobs
 
@@ -117,21 +150,22 @@ The server derives citation fields from retrieved chunk metadata and rejects mod
 | `202` | Indexing job accepted |
 | `204` | Successful logout/deletion with no body |
 | `400` | Malformed or invalid request |
-| `401` | No valid session |
+| `401` | No valid session or GitHub authorization expired |
 | `403` / `404` | Forbidden or deliberately concealed resource |
 | `409` | Conflicting active job/state |
-| `429` | Rate/quota limit exceeded |
+| `429` | GitHub rate limit reached; includes `Retry-After` where GitHub supplies timing information |
 | `502` | Invalid/unavailable upstream response |
 | `503` | Required AI/vector/GitHub dependency unavailable |
 
-Error `code` values should be stable (`VALIDATION_ERROR`, `GITHUB_RATE_LIMITED`, `GITHUB_UNAVAILABLE`, `INDEX_NOT_READY`, `AI_UNAVAILABLE`, `VECTOR_STORE_UNAVAILABLE`, `QUOTA_EXCEEDED`, `RESOURCE_NOT_FOUND`). Include `Retry-After` where meaningful. Never claim successful indexing or generation before the corresponding operation completes.
+Implemented repository integration error codes are `GITHUB_AUTHORIZATION_EXPIRED` (`401`), `GITHUB_ACCESS_DENIED` (`403`), `GITHUB_RATE_LIMITED` (`429`, with `Retry-After` when available), and `GITHUB_UNAVAILABLE` (`503`). Planned stable codes include `VALIDATION_ERROR`, `INDEX_NOT_READY`, `AI_UNAVAILABLE`, `VECTOR_STORE_UNAVAILABLE`, `QUOTA_EXCEEDED`, and `RESOURCE_NOT_FOUND`. Never claim successful indexing or generation before the corresponding operation completes.
 
 ## Authorization matrix
 
 | Resource/action | Rule |
 |---|---|
-| `/auth/me`, logout | Current session |
-| GitHub repository list | Current user's server-held GitHub authorization |
+| `/api/auth/me` | Public session check; returns only the current profile or `{ "authenticated": false, "user": null }` |
+| `/api/auth/logout` | Current session plus valid CSRF request header |
+| `/api/repositories` | Authenticated user's server-held GitHub authorization; current implementation only returns public repositories |
 | Local repository and branch access | Repository connected to current local user plus current GitHub permission when needed |
 | Job read/cancel | Job's repository belongs to current user |
 | Conversation/message read/write/delete | Conversation owner is current user; repository relation also valid |

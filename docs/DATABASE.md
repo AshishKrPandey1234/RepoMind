@@ -1,6 +1,6 @@
 # Database Design
 
-**Status:** Logical schema proposal; physical types, migrations, and indexes will be finalized with the first persistence milestone.
+**Status:** Logical schema proposal; physical types, migrations, and indexes remain future work. Milestone 2 does not persist OAuth profiles, tokens, or repository results in MySQL; the authorized client is held in the server HTTP session.
 
 MySQL is the source of truth for users and application workflows. Embeddings and chunk metadata live in the vector store; relational records retain job and snapshot state so the vector collection can be scoped and rebuilt.
 

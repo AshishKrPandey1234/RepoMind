@@ -1,10 +1,10 @@
 # Interview Notes
 
-**Status:** Design notes. Milestone 1 currently contains a React/Vite dashboard shell and a Spring Boot health endpoint; the product workflows described here are still planned and must not be presented as implemented.
+**Status:** Milestone 2 implements a React/Vite dashboard, Spring Boot API foundation, GitHub OAuth session, current-user endpoint, and paginated public repository listing. Indexing and AI features remain planned; OAuth end-to-end use requires a locally registered GitHub OAuth App.
 
 ## 30-second project explanation
 
-RepoMind is a planned full-stack repository assistant. A React client talks to a Java 21/Spring Boot modular monolith. Users authenticate through GitHub, choose an accessible repository and branch, and the backend indexes eligible source files as line-aware chunks in a vector store. For questions, it retrieves chunks scoped to the user's repository and indexed commit, asks a configurable model to answer from that evidence, and maps citations back to trusted file paths and line ranges. MySQL stores users and workflow history; the vector index is derived data.
+RepoMind is a full-stack repository assistant in progress. Implemented today: a React/Vite client talks to a Java 21/Spring Boot modular monolith, users sign in through GitHub OAuth, and the server lists public repositories visible to that authorization. The GitHub authorized client stays in the backend session; the browser sees only a session cookie and a limited profile/repository DTO. Repository selection, indexing, line-aware chunking, vector retrieval, grounded answers, and MySQL workflow persistence are future work.
 
 ## Why a modular monolith?
 
@@ -31,9 +31,9 @@ The question is embedded and searched against the active repository/commit snaps
 
 ## Authentication and authorization
 
-The planned flow is server-side OAuth authorization code with one-time state verification. The backend exchanges the code, maps GitHub identity to a local user, and creates an HTTP-only session cookie. GitHub and model credentials stay on the server. Cookie sessions require CSRF protection for unsafe requests, and CORS should be narrow. Every repository, job, and conversation query uses the current authenticated user in its ownership predicate. The browser cannot choose a user ID to impersonate.
+The implemented flow uses Spring Security's OAuth2 login support. The browser starts at `/oauth2/authorization/github`; Spring Security stores state in the server session, handles the code exchange, and saves the GitHub authorized client in `HttpSessionOAuth2AuthorizedClientRepository`. The callback passes through Vite at `localhost:5173/login/oauth2/code/github`. `/api/auth/me` projects only GitHub ID, login, display name, and avatar URL. The session cookie is HttpOnly and SameSite=Lax; unsafe requests use a CSRF token fetched from `/api/auth/csrf`. The React app keeps that CSRF token in memory and sends it with logout. OAuth client credentials and access tokens remain on the backend. No local user row is persisted yet.
 
-One design discussion: GitHub's docs generally prefer GitHub Apps where possible because they offer more granular permissions and short-lived tokens. The requested product stack calls for GitHub OAuth 2.0, so the exact app registration type and permission model must be settled before implementation.
+This milestone requests `read:user` and `public_repo`, then filters repository results to `visibility=public`. The `public_repo` OAuth scope permits full access to public repositories, including hooks, despite this implementation only issuing GET requests. That permission scope is broader than the code's behavior; moving to a GitHub App with read-only permissions is a design decision before private/content access.
 
 ## Failure handling
 
@@ -46,7 +46,7 @@ One design discussion: GitHub's docs generally prefer GitHub Apps where possible
 
 ## Trade-offs and open choices to be ready to discuss
 
-- OAuth App simplicity versus GitHub App fine-grained repository permissions.
+- OAuth App simplicity versus GitHub App fine-grained, read-only repository permissions.
 - Session cookie versus token-based browser auth; cookie avoids exposing bearer tokens but requires CSRF defenses.
 - Chroma versus another compatible vector store: decide based on Spring AI adapter support, deployment, filtering, persistence, and operational needs.
 - Chunk size/overlap and retrieval top-k affect context quality, latency, and model cost; tune with representative repositories and tests.

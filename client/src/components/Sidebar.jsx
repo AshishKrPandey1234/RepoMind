@@ -1,6 +1,7 @@
 import Icon from './Icon.jsx'
 
-function Sidebar() {
+function Sidebar({ user }) {
+  const connected = Boolean(user)
   return (
     <aside className="sidebar">
       <a className="brand" href="#top" aria-label="RepoMind home">
@@ -15,9 +16,9 @@ function Sidebar() {
       </nav>
       <div className="sidebar-divider" />
       <div className="sidebar-label">YOUR CONNECTION</div>
-      <div className="connection-card"><span className="connection-icon"><Icon name="github" size={17} /></span><span><strong>GitHub</strong><small>Not connected</small></span><span className="connection-dot" /></div>
+      <div className="connection-card"><span className="connection-icon"><Icon name="github" size={17} /></span><span><strong>GitHub</strong><small>{connected ? `@${user.githubLogin}` : 'Not connected'}</small></span><span className={`connection-dot ${connected ? 'online' : ''}`} /></div>
       <div className="sidebar-bottom">
-        <div className="sidebar-note"><span className="note-icon"><Icon name="info" size={15} /></span><span><strong>Preview workspace</strong><small>Sign-in and repository features are not active yet.</small></span></div>
+        <div className="sidebar-note"><span className="note-icon"><Icon name="info" size={15} /></span><span><strong>{connected ? 'Public repository access' : 'Workspace ready'}</strong><small>{connected ? 'Repository browsing is active; indexing is not enabled.' : 'Sign in to browse your public repositories.'}</small></span></div>
         <div className="sidebar-version"><span>RepoMind</span><span>Foundation · 01</span></div>
       </div>
     </aside>

@@ -60,6 +60,23 @@
 .empty-state-foot { position: absolute; right: 0; bottom: 0; left: 0; display: flex; justify-content: space-between; padding: 10px 14px; color: #747582; border-top: 1px solid rgba(255,255,255,.055); font-size: 8px; }.empty-state-foot span { display: inline-flex; align-items: center; gap: 6px; }.empty-state-foot svg { color: #7f8190; }
 .page-footer { display: flex; justify-content: space-between; padding: 20px 1px 0; color: #666773; font-size: 8px; }.footer-dot { padding: 0 4px; color: #9790a9; }.footer-status { display: inline-flex; align-items: center; gap: 6px; }
 
+.connected-pill .status-dot,.connection-dot.online { background: #70c79b; box-shadow: 0 0 8px rgba(112,199,155,.3); }
+.user-avatar { object-fit: cover; }
+.logout-button { min-height: 31px; font-size: 9px; }
+.repository-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.repository-card { min-width: 0; padding: 15px; border: 1px solid var(--border); border-radius: 10px; background: linear-gradient(143deg,rgba(255,255,255,.035),rgba(255,255,255,.013)); }
+.repository-card-heading { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.repository-icon { display: grid; width: 29px; height: 29px; flex: 0 0 auto; place-items: center; color: #b59ef4; border-radius: 8px; background: rgba(161,132,236,.11); }
+.repository-card-heading a { overflow: hidden; color: #ded9f1; font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }.repository-card-heading a:hover { color: #c3aff9; }
+.repository-visibility { flex: 0 0 auto; padding: 3px 6px; color: #9694a1; border: 1px solid rgba(255,255,255,.09); border-radius: 12px; font-size: 8px; text-transform: capitalize; }
+.repository-description { display: -webkit-box; min-height: 31px; overflow: hidden; margin: 12px 0; color: #8f909d; font-size: 10px; line-height: 1.55; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.repository-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; color: #777987; font-size: 9px; }.repository-meta > span { display: inline-flex; align-items: center; gap: 5px; }.language-dot { width: 7px; height: 7px; border-radius: 50%; background: #9c8bd1; }
+.repository-message { display: flex; min-height: 115px; align-items: center; justify-content: center; gap: 10px; color: #a5a4b1; border: 1px solid var(--border); border-radius: 10px; font-size: 11px; }
+.loading-spinner { width: 15px; height: 15px; border: 2px solid rgba(185,164,242,.2); border-top-color: #b9a4f2; border-radius: 50%; animation: spin .8s linear infinite; }@keyframes spin { to { transform: rotate(360deg); } }
+.repository-error { display: flex; align-items: center; gap: 10px; padding: 13px; color: #e6b9b9; border: 1px solid rgba(210,126,126,.2); border-radius: 9px; background: rgba(185,75,75,.06); font-size: 10px; }.repository-error > span { flex: 1; }.repository-error .button { flex: 0 0 auto; }
+.repository-pagination { display: flex; align-items: center; justify-content: space-between; padding-top: 12px; color: #858692; font-size: 9px; }.repository-pagination > div { display: flex; gap: 7px; }.repository-pagination .button { min-height: 30px; font-size: 9px; }.repository-pagination .button:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+.connection-dot.online { animation: none; }
+
 @media (min-width: 1500px) { .page-content { padding-top: 43px; }.welcome-panel { min-height: 320px; } }
 @media (max-width: 1080px) { .sidebar { width: 214px; }.main-content { margin-left: 214px; }.page-content { padding-right: 27px; padding-left: 27px; }.topbar { padding-right: 27px; padding-left: 27px; }.welcome-panel { padding-right: 25px; padding-left: 25px; }.welcome-art { transform: scale(.9); } }
 @media (max-width: 800px) {
@@ -76,3 +93,5 @@
   .section-heading { align-items: start; }.section-heading h2 { font-size: 16px; }.unavailable-label { padding-top: 17px; font-size: 8px; }.overview-grid { grid-template-columns: 1fr; gap: 8px; }.overview-card { min-height: 106px; padding: 13px; }.metric-icon { margin-bottom: 8px; }.metric-topline { top: 17px; left: 51px; }.metric-value { font-size: 19px; }.overview-card p { max-width: none; }
   .button-secondary { gap: 6px; padding: 0 9px; font-size: 9px; }.repositories-section { margin-top: 25px; }.empty-state { min-height: 290px; grid-template-columns: 1fr; gap: 3px; padding: 18px 18px 48px; text-align: center; }.empty-illustration { height: 102px; }.empty-copy { margin: auto; }.empty-eyebrow { justify-content: center; }.empty-copy h3 { font-size: 13px; }.empty-copy p { font-size: 9px; }.empty-state-foot { align-items: center; gap: 9px; font-size: 7px; }.page-footer { gap: 8px; font-size: 7px; }
 }
+
+@media (max-width: 700px) { .repository-grid { grid-template-columns: 1fr; }.topbar-actions { gap: 8px; }.logout-button { padding: 0 9px; } }

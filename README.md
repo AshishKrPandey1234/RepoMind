@@ -2,19 +2,21 @@
 
 RepoMind is a planned AI-powered GitHub repository assistant for exploring a codebase through grounded questions, summaries, and project-specific interview practice. The initial implementation target is a modular monolith: a React and Vite client and a Java 21/Spring Boot API backed by MySQL and a vector store.
 
-> **Project status:** Milestone 1 foundation. The responsive dashboard shell and API health endpoint are implemented. GitHub sign-in, repository data, indexing, chat, summaries, and interview generation remain planned and are not functional yet.
+> **Project status:** Milestone 2. GitHub OAuth sign-in, server-side sessions, current-user status, and paginated public repository listing are implemented. Indexing, chat, summaries, interview generation, and private repository access are not implemented.
 
 ## Problem statement
 
 Understanding an unfamiliar repository requires locating relevant files, connecting code across modules, and learning how the parts work together. RepoMind will let an authorized user select a GitHub repository and branch, index eligible source files, and ask questions whose answers link back to file paths and line ranges. It will also produce repository summaries and interview questions grounded in retrieved repository context.
 
-## Planned capabilities
+## Capabilities
 
-- GitHub sign-in and repository listing limited to the signed-in user's access.
-- Branch selection and asynchronous indexing with visible job status and failure details.
+- **Implemented:** GitHub OAuth sign-in, session-aware dashboard, current-user endpoint, and paginated public repository listing through the signed-in user's GitHub authorization.
+- **Planned:** Branch selection and asynchronous indexing with visible job status and failure details.
 - Source filtering, chunking, embedding, and vector search.
 - Grounded Q&A, repository summaries, and interview practice with source references.
 - Persistent user, repository, job, and conversation metadata in MySQL.
+
+OAuth sessions and authorized clients are held in the backend's in-memory servlet session; user profiles and repository results are not persisted in MySQL. This milestone is single-instance until shared session storage is configured.
 
 ## Architecture
 
@@ -23,19 +25,19 @@ The system is a modular monolith with clear package boundaries. The frontend cal
 ```mermaid
 flowchart LR
   U[User] --> FE[React + Vite]
-  FE -->|HTTPS / session cookie| API[Spring Boot modular monolith]
+  FE -->|Same-origin session cookie| API[Spring Boot modular monolith]
   API --> AUTH[OAuth + authorization]
   API --> GH[GitHub REST API]
-  API --> IDX[Indexing and RAG services]
-  API --> DB[(MySQL: users, repositories, jobs, chats)]
-  IDX --> VS[(Vector store: embeddings and chunk metadata)]
-  IDX --> LLM[Configurable embedding and chat model]
+  API --> IDX[Planned indexing and RAG services]
+  API --> DB[(Planned MySQL application data)]
+  IDX --> VS[(Planned vector store)]
+  IDX --> LLM[Planned configurable AI models]
   GH --> IDX
 ```
 
 See [architecture](docs/ARCHITECTURE.md), [database](docs/DATABASE.md), [API](docs/API.md), [project specification](docs/PROJECT_SPEC.md), and [interview notes](docs/INTERVIEW_NOTES.md).
 
-## RAG workflow
+## Planned RAG workflow
 
 1. The user requests indexing for an authorized repository and branch.
 2. The API validates ownership/access, creates an indexing job, and fetches the selected branch tree and file contents from GitHub.
@@ -73,7 +75,7 @@ sequenceDiagram
 
 ## Authentication and security summary
 
-The planned login uses GitHub's server-side OAuth authorization-code flow. The backend owns the client secret, exchanges the code, retrieves the GitHub identity, and establishes an HTTP-only, Secure, SameSite session cookie. OAuth state is validated to prevent request forgery. The browser never receives the GitHub access token or model API key. Repository and conversation access is checked against the authenticated local user on every request. See the security sections in the architecture and API documents.
+GitHub login uses Spring Security's server-side OAuth authorization-code flow. The backend exchanges the code, retrieves the GitHub profile, and establishes an HTTP-only, SameSite=Lax session cookie; the authorized client remains in the backend session. The browser never receives the GitHub access token. Unsafe requests use Spring Security CSRF protection. This milestone requests `read:user` and `public_repo` and filters the repository API to public repositories. GitHub's `public_repo` OAuth scope permits full access to public repositories, including repository hooks, although RepoMind only performs reads. Private repository access is not requested. See [architecture](docs/ARCHITECTURE.md) and [API](docs/API.md).
 
 ## Planned technology
 
@@ -87,18 +89,16 @@ The planned login uses GitHub's server-side OAuth authorization-code flow. The b
 | Vector storage | Chroma or compatible Spring AI vector store; exact version/deployment to be selected |
 | Packaging/deployment | Containerized frontend/API and separately managed MySQL/vector service; deployment target TBD |
 
-## Local setup and configuration
-
 ## Local development on Windows
 
 ### Prerequisites
 
-- Java 21 (the backend uses Spring Boot 3.5.16, which supports Java 21).
+- Java 21 (the backend uses Spring Boot 3.5.16).
 - Node.js 20.19.x or 22.12 and newer, plus npm (Vite 8 supports these Node.js lines).
 - MySQL Server 8.x, running locally on port 3306.
 - Internet access on the first build so npm and Maven can download project dependencies. The Maven Wrapper in `backend/` downloads the configured Maven distribution if it is not cached.
 
-Milestone 1 environment check: Java 21, Node.js 24, npm 11, and MySQL Server 8.0 were found; the `MySQL80` Windows service was running and port 3306 was reachable. A `mvn` command was not on `PATH`; use the included wrapper (`mvnw.cmd`). The existence of the `repomind` database or local app user has not been checked.
+Local environment check: Java 21, Node.js 24, npm 11, and MySQL Server 8.0 were found; the `MySQL80` Windows service was running and port 3306 was reachable. MySQL connectivity was subsequently confirmed in Spring Boot logs. A `mvn` command was not on `PATH`; use the included wrapper (`mvnw.cmd`).
 
 ### Prepare MySQL once
 
@@ -130,6 +130,21 @@ $env:DB_PASSWORD = [System.Net.NetworkCredential]::new('', $securePassword).Pass
 
 For persistence across sessions, use **Edit environment variables for your account** in Windows, add `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD`, then open a new terminal. Keep real credentials in your local environment only; `.env` files are ignored by Git.
 
+### Register the local GitHub OAuth app
+
+Create a GitHub OAuth App in GitHub Developer settings with homepage URL `http://localhost:5173` and authorization callback URL `http://localhost:5173/login/oauth2/code/github`. Spring Security's default callback path is `/login/oauth2/code/{registrationId}` with registration ID `github`; Vite forwards it to port 8080. Keep the OAuth client ID and secret in the local process environment only.
+
+```powershell
+$env:GITHUB_CLIENT_ID = 'your-local-oauth-client-id'
+$secureOAuthSecret = Read-Host 'Enter the GitHub OAuth client secret' -AsSecureString
+$env:GITHUB_CLIENT_SECRET = [System.Net.NetworkCredential]::new('', $secureOAuthSecret).Password
+$env:GITHUB_REDIRECT_URI = 'http://localhost:5173/login/oauth2/code/github'
+$env:FRONTEND_URL = 'http://localhost:5173'
+$env:SESSION_COOKIE_SECURE = 'false'
+```
+
+Keep these variables in the same PowerShell session used to start the backend. `SESSION_COOKIE_SECURE=false` is for local HTTP development only; set it to `true` behind HTTPS in deployment. Use `localhost` consistently for the frontend and OAuth callback, rather than mixing it with `127.0.0.1`.
+
 ### Run the backend
 
 From `backend/`, after the database and environment variables are configured:
@@ -149,7 +164,9 @@ npm ci
 npm run dev
 ```
 
-Vite prints the local URL, normally `http://localhost:5173`. Requests beginning with `/api` are proxied to the Spring Boot server at port 8080. The GitHub sign-in button is intentionally a preview and reports that authentication is not connected.
+Vite prints the local URL, normally `http://localhost:5173`. Requests beginning with `/api`, `/oauth2`, and `/login/oauth2` are proxied to Spring Boot at port 8080. The callback URI registered in the GitHub OAuth App must exactly match `GITHUB_REDIRECT_URI`. After authorization, the dashboard reloads the session and public repositories. The CSRF token used for logout stays in page memory; neither it nor the GitHub access token is written to localStorage.
+
+The Vite proxy target defaults to `http://localhost:8080`. `REPOMIND_API_ORIGIN` can override it for local testing; it is a Vite server setting and is not exposed to the browser.
 
 ### Build checks
 

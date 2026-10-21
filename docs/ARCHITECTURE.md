@@ -1,33 +1,36 @@
 # Architecture
 
-**Status:** Architecture baseline; later integrations and production details remain to be validated.
+**Status:** Milestone 2 implements GitHub OAuth login, a server-side session, current-user status, and public repository listing. Indexing, vector storage, and model integration remain planned.
 
-The Milestone 1 implementation is a responsive React/Vite client and a Spring Boot API skeleton with environment-based MySQL settings and `GET /api/health`. GitHub access, Spring Security configuration, indexing, vector storage, and model integration remain unimplemented.
+The implementation is a responsive React/Vite client and a Spring Boot modular monolith. The browser uses Vite's same-origin development proxy for API and OAuth routes. Spring Security keeps the GitHub authorized client in the server's HTTP session, identified by an opaque HttpOnly cookie. The API retrieves public repository metadata from GitHub using the session-held token. MySQL is configured, but user profiles and repository results are not persisted in this milestone. Indexing, vector storage, and model integration remain unimplemented.
 
 ## System shape
 
-RepoMind uses one deployable Spring Boot modular monolith with internal feature modules. The React/Vite application is a separate frontend build served behind the same public origin where practical. The API coordinates GitHub, MySQL, a vector database, and configurable Spring AI model clients. MySQL owns durable application state; the vector store is a derived index that can be rebuilt from GitHub snapshots.
+RepoMind uses one deployable Spring Boot modular monolith with internal feature modules. The React/Vite application is a separate frontend build served behind the same public origin. In local development, Vite proxies `/api`, `/oauth2`, and `/login/oauth2` to the API so OAuth redirects and session cookies remain on `localhost:5173` in the browser. The implemented API coordinates GitHub OAuth and public repository listing. MySQL, indexing, vector storage, and Spring AI are future integrations; MySQL will own planned durable application state and the vector store will hold derived data.
+
+The diagram shows the target monolith shape; only the authentication and repository catalog paths are implemented so far.
 
 ```mermaid
 flowchart LR
   User --> SPA[React + Vite SPA]
-  SPA -->|HTTPS, cookie session| Web
+  SPA -->|Same-origin requests and session cookie| Web
   subgraph Monolith[Spring Boot modular monolith]
     Web[Spring Boot API entry]
-    Auth[Auth/security]
-    Catalog[Repository catalog]
+    Auth[Spring Security OAuth/session]
+    Catalog[GitHub repository catalog]
     Jobs[Indexing jobs]
     RAG[Chat/RAG]
     Summary[Summary/interview]
     Store[Persistence adapters]
     Auth --> Catalog
-    Catalog --> Jobs
+  Catalog --> Jobs
     Jobs --> RAG
     RAG --> Summary
     Catalog --> Store
     Jobs --> Store
     RAG --> Store
   end
+  Auth --> GHLogin[GitHub OAuth endpoints]
   Catalog --> GH[GitHub REST API]
   Jobs --> GH
   Jobs --> Embed[Embedding model]
@@ -56,22 +59,46 @@ common/        error response, validation, correlation ID; avoid a dumping groun
 
 Controllers translate HTTP to service calls and DTOs; services own use cases and authorization; repositories handle relational persistence; integration adapters isolate external APIs. Avoid controllers calling each other or exposing persistence entities as API contracts. Keep module dependencies directed toward domain/use-case code and ports.
 
-## Authentication and request security
+## Implemented authentication and request security
 
-1. Browser navigates to backend `/api/auth/github`.
-2. Backend generates and stores one-time OAuth `state`, then redirects to GitHub authorization.
-3. GitHub redirects to `/api/auth/github/callback` with code and state.
-4. Backend validates state, exchanges code using a server-only client secret, obtains the GitHub user profile, and creates/updates the local user.
-5. Backend creates a server session and sends only an opaque session cookie (`HttpOnly`, `Secure` in production, `SameSite=Lax` or stricter as compatible). OAuth token stays server-side.
-6. Logout invalidates the local session. Revocation/deletion behavior for stored GitHub credentials must be defined.
+The local callback is `http://localhost:5173/login/oauth2/code/github`, proxied by Vite to Spring Security's default `/login/oauth2/code/{registrationId}` callback. Spring Security generates and validates OAuth `state`, exchanges the authorization code using backend-only environment credentials, retrieves the GitHub profile, and retains the `OAuth2AuthorizedClient` in `HttpSessionOAuth2AuthorizedClientRepository`. This milestone does not persist a local user or credential row.
 
-Because sessions use cookies, unsafe methods require CSRF protection and the frontend must obtain/use the configured CSRF token. CORS should allow only known frontend origins; production should prefer a same-origin deployment. Do not use wildcard credentialed CORS. Return `401` when no session is present. Derive user identity from the Spring Security principal; never accept user ownership from request payloads.
+```mermaid
+sequenceDiagram
+  actor User
+  participant Browser as Browser at localhost:5173
+  participant Vite as Vite proxy
+  participant Spring as Spring Security API
+  participant GitHub
+  User->>Browser: Select Sign in with GitHub
+  Browser->>Vite: GET /oauth2/authorization/github
+  Vite->>Spring: Proxy authorization request
+  Spring->>Spring: Create OAuth state in server session
+  Spring-->>Browser: Set HttpOnly session cookie and redirect to GitHub
+  Browser->>GitHub: Authorize read:user and public_repo
+  GitHub-->>Browser: Redirect to /login/oauth2/code/github with code and state
+  Browser->>Vite: Callback request with session cookie
+  Vite->>Spring: Proxy callback
+  Spring->>GitHub: Exchange code and retrieve profile
+  GitHub-->>Spring: Access token and profile
+  Spring->>Spring: Store authorized client in server session
+  Spring-->>Browser: Redirect to frontend with opaque session cookie
+  Browser->>Vite: GET /api/auth/me and /api/repositories
+  Vite->>Spring: Proxy same-origin session requests
+  Spring->>GitHub: GET /user/repos (public visibility)
+  GitHub-->>Spring: Repository page
+  Spring-->>Browser: Profile and allow-listed repository DTOs
+```
 
-GitHub OAuth App supports identity and user-authorized API access but typically requires broader scopes for private repository content. A GitHub App can provide finer repository permissions and short-lived tokens. The product requirement names OAuth 2.0; decide the app type before registering credentials. Request minimal scopes; never place client secrets or access tokens in Vite variables, browser storage, URLs, or logs.
+The API session cookie is `HttpOnly` and `SameSite=Lax`. `SESSION_COOKIE_SECURE=false` is for localhost HTTP; deployment over HTTPS must set it to `true`. Use a consistent hostname for frontend and callback. OAuth failure redirects use a fixed, non-sensitive code. The frontend never receives or stores the GitHub access token.
+
+Because sessions use cookies, unsafe methods require Spring Security CSRF protection. `GET /api/auth/csrf` supplies a token to the SPA; the page keeps it in memory and sends it in the header for `POST /api/auth/logout`. Logout invalidates the session and expires its cookie. `GET /api/auth/me` is a public session check; protected API requests such as `/api/repositories` return `401` without a session. No broad CORS configuration is used; the local frontend proxies API/auth routes and deployed operation should use a same-origin reverse proxy. Derive identity from the Spring Security principal; never accept user ownership from request data.
+
+This milestone uses a GitHub OAuth App with `read:user` and `public_repo`; repository listing filters to public visibility. GitHub's `public_repo` scope gives the OAuth token full access to public repositories, including hooks, even though RepoMind only performs reads. Private access is excluded. A GitHub App can provide read-only repository permissions and is a future option. Never place client secrets or access tokens in Vite variables, browser storage, URLs, or logs.
 
 ## Repository authorization
 
-The repository catalog is sourced from the authenticated GitHub API rather than trusting a client-supplied owner/name. Local rows map the GitHub repository ID to the user who connected it. Every job, conversation, and retrieval request must check current-user ownership and repository relationship. For private repositories, verify that the stored authorization remains valid and handle revocation/permission loss. Repository identifiers in a vector filter are additional isolation, not a substitute for API authorization.
+The current repository page is sourced from GitHub's authenticated `/user/repos` API and maps only the repository ID, full name, description, visibility, language, URL, and default branch. The API does not accept repository IDs from the browser or store repository rows yet. Future jobs, conversations, and retrieval requests must check current-user ownership and repository relationship. Repository identifiers in a vector filter are additional isolation, not a substitute for API authorization.
 
 ## Indexing pipeline
 
@@ -111,18 +138,18 @@ Summary and interview generation reuse the retrieval service with task-specific 
 
 ## Data and resilience
 
-MySQL stores local users, linked GitHub identity/credential reference, repository metadata, index jobs, conversations, messages, and citation records (see [DATABASE.md](DATABASE.md)). Vector records are rebuildable derived data. Use migrations, transactions for relational state transitions, timeouts and bounded retries for external calls, and a consistent error mapper. Do not hold a database transaction open during a long GitHub or model call. Use a bounded task executor initially; a message broker is not required for the first modular-monolith version.
+The planned MySQL schema stores local users, linked GitHub identity/credential reference, repository metadata, index jobs, conversations, messages, and citation records (see [DATABASE.md](DATABASE.md)). This milestone only uses MySQL connectivity inherited from the foundation; it does not write these entities. Future vector records are rebuildable derived data. Use migrations, transactions for relational state transitions, timeouts and bounded retries for external calls, and a consistent error mapper. Do not hold a database transaction open during a long GitHub or model call. Use a bounded task executor initially; a message broker is not required for the first modular-monolith version.
 
 ## Deployment plan (proposed)
 
-- Build static Vite assets and serve behind a TLS reverse proxy/CDN; route `/api` to Spring Boot. Same-origin session cookie simplifies CSRF/CORS.
+- Build static Vite assets and serve behind a TLS reverse proxy/CDN; route `/api`, `/oauth2`, and `/login/oauth2` to Spring Boot. Same-origin session cookie simplifies CSRF/CORS. The local Vite proxy covers those three route prefixes for development.
 - Run one or more identical API instances only after session storage is shared (e.g. distributed Spring Session) or routing is sticky; initial deployment can use one API instance.
 - Provision managed MySQL and a private vector service (Chroma or compatible) with persistent storage, network restrictions, backups, health checks, and access credentials in a secrets manager.
-- Configure GitHub OAuth callback URL, allowed frontend origin, model provider/model IDs, database URL, vector endpoint, quotas, and timeouts through environment/secret management.
+- Configure the GitHub OAuth callback URL, frontend redirect URL, secure-cookie flag, model provider/model IDs, database URL, vector endpoint, quotas, and timeouts through environment/secret management.
 - Use health/readiness checks that distinguish application readiness from external provider health. Avoid returning secret/config values from diagnostics.
 - Add structured logs with request/job correlation IDs, metrics for job durations/failures, provider latency/rate limits, and retrieval counts. Redact tokens and avoid raw repository source/prompt logging.
 - Define retention, user data deletion, vector cleanup, database backup/restore, and incident procedures before production.
 
 ## Key decisions to validate
 
-Boot/Spring AI compatible versions, provider and embedding dimensions, OAuth App vs GitHub App, token encryption/storage strategy, vector-store version and atomic replacement behavior, migrations tool, asynchronous worker limits, deployment provider, and data retention are intentionally unresolved until implementation planning.
+Spring AI provider and embedding dimensions, when to replace the current public-only OAuth App with a read-only GitHub App, durable/shared session storage, vector-store version and atomic replacement behavior, migrations tool, asynchronous worker limits, deployment provider, and data retention remain open.

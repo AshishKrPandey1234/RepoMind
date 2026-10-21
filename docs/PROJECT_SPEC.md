@@ -1,6 +1,6 @@
 # RepoMind Project Specification
 
-**Status:** Milestone 1 foundation is implemented: React/Vite dashboard shell, Spring Boot API skeleton, and a health endpoint. Product features such as GitHub authentication, repository access, indexing, and AI are not implemented.
+**Status:** Milestone 2 implements the React/Vite dashboard, Spring Boot API foundation, GitHub OAuth session, current-user endpoint, and paginated public repository listing. Local user/repository persistence, indexing, and AI are not implemented.
 
 ## 1. Problem statement
 
@@ -10,7 +10,7 @@ Developers joining an unfamiliar project spend time locating relevant code, trac
 
 ### Goals
 
-- Authenticate users through GitHub and list only repositories GitHub authorizes them to see.
+- Authenticate users through GitHub and list only repositories GitHub authorizes them to see. **Milestone 2 scope:** public repositories only.
 - Allow repository and branch selection and provide durable indexing status.
 - Fetch, filter, chunk, embed, and index source files with provenance metadata.
 - Answer questions using scoped retrieval and cite relevant file paths and line ranges.
@@ -38,8 +38,8 @@ Developers joining an unfamiliar project spend time locating relevant code, trac
 
 | ID | Requirement | Acceptance intent |
 |---|---|---|
-| FR-01 | GitHub sign-in | OAuth state is checked; identity is mapped to a local user; token remains server-side. |
-| FR-02 | Repository and branch selection | Results come from the authenticated GitHub identity and are paginated; inaccessible IDs are rejected. |
+| FR-01 | GitHub sign-in | **Implemented in Milestone 2:** Spring Security validates OAuth state, returns the GitHub profile through `/api/auth/me`, and retains the authorized client in a server-side session. Local user persistence remains planned. |
+| FR-02 | Repository listing and later branch selection | **Partially implemented in Milestone 2:** authenticated, paginated listing of public repositories. Branch selection and locally connected repository records remain planned. |
 | FR-03 | Indexing | Each job records repository, branch, resolved commit, state, timestamps, and safe failure details. |
 | FR-04 | File policy | Binary, generated, oversized, and likely secret-bearing files are excluded before embedding. |
 | FR-05 | Provenance | Each indexed chunk keeps path, line start/end, commit SHA, branch/repository scope, and stable chunk ID. |
@@ -59,6 +59,8 @@ Developers joining an unfamiliar project spend time locating relevant code, trac
 - Avoid logging prompts or repository source by default; define retention and deletion behavior before production.
 - Ensure answer citations are derived from retrieval records; treat repository content as untrusted prompt input.
 - Add unit and integration tests in later implementation milestones; documentation alone does not establish these properties.
+
+Milestone 2 uses the OAuth App scopes `read:user` and `public_repo`. The latter permits full access to public repositories, including hooks, even though the current service only reads repository metadata. Private repository access is not requested. GitHub Apps provide finer-grained read-only permissions and remain a future consideration.
 
 ## 6. Planned architecture
 
@@ -137,7 +139,7 @@ The API first authorizes the user against the requested local repository and con
 
 ## 10. Open decisions
 
-- OAuth App versus GitHub App. OAuth is in the requested stack; GitHub recommends considering GitHub Apps for finer-grained access and short-lived tokens.
+- Whether to migrate from the implemented OAuth App to a GitHub App for finer-grained, read-only repository permissions before adding repository content access.
 - Whether to retain GitHub tokens after login and how to encrypt/refresh/revoke them. Needed for private-repository indexing; do not persist plaintext.
 - Spring Boot and Spring AI compatible release versions, embedding/chat provider, model dimensions, and cost limits.
 - Vector store deployment and isolation strategy; exact Chroma/compatible adapter version.
@@ -148,9 +150,9 @@ The API first authorizes the user against the requested local repository and con
 ## 11. Delivery plan
 
 1. Documentation and architecture review (complete).
-2. Local project foundation, environment-based database configuration, health endpoint, and starter verification (current milestone).
-3. GitHub OAuth/session and authenticated identity tests.
-4. Repository/branch catalog and ownership checks.
+2. Local project foundation, environment-based database configuration, health endpoint, and starter verification (complete).
+3. GitHub OAuth/session, authenticated identity, and public repository listing (implemented; end-to-end OAuth configuration remains a local verification step).
+4. Repository persistence, branch listing/selection, and ownership checks.
 5. Index job model and secure source retrieval/filtering/chunk metadata.
 6. Embeddings/vector adapter and indexing lifecycle tests.
 7. Scoped RAG endpoints, citation validation, chat history, and failure handling.
